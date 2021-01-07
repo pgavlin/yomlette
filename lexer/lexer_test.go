@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goccy/go-yaml/lexer"
+	"github.com/pgavlin/yomlette/lexer"
 )
 
 func TestTokenize(t *testing.T) {

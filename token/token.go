@@ -117,6 +117,8 @@ const (
 	StringType
 	// BoolType type for Bool token
 	BoolType
+	// TemplateType for Template token
+	TemplateType
 )
 
 // String type identifier to text
@@ -186,6 +188,8 @@ func (t Type) String() string {
 		return "Infinity"
 	case NanType:
 		return "Nan"
+	case TemplateType:
+		return "Template"
 	}
 	return ""
 }
@@ -1016,6 +1020,18 @@ func DocumentEnd(pos *Position) *Token {
 		Indicator:     NotIndicator,
 		Value:         "...",
 		Origin:        "...",
+		Position:      pos,
+	}
+}
+
+// Template create token for Template
+func Template(value string, org string, pos *Position) *Token {
+	return &Token{
+		Type:          TemplateType,
+		CharacterType: CharacterTypeMiscellaneous,
+		Indicator:     NotIndicator,
+		Value:         value,
+		Origin:        org,
 		Position:      pos,
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goccy/go-yaml/token"
+	"github.com/pgavlin/yomlette/token"
 	"golang.org/x/xerrors"
 )
 
@@ -61,6 +61,16 @@ const (
 	TagType
 	// CommentType type identifier for comment node
 	CommentType
+	// ActionType type identifier for action node
+	ActionType
+	// IfType type identifier for if node
+	IfType
+	// RangeType type identifier for range node
+	RangeType
+	// WithType type identifier for with node
+	WithType
+	// TemplateInvokeType type identifier for template invoke node
+	TemplateInvokeType
 )
 
 // String node type identifier to text
@@ -106,6 +116,16 @@ func (t NodeType) String() string {
 		return "Tag"
 	case CommentType:
 		return "Comment"
+	case ActionType:
+		return "Action"
+	case IfType:
+		return "If"
+	case RangeType:
+		return "Range"
+	case WithType:
+		return "With"
+	case TemplateInvokeType:
+		return "TemplateInvoke"
 	}
 	return ""
 }
@@ -374,6 +394,15 @@ func MappingValue(tk *token.Token, key Node, value Node) *MappingValueNode {
 		Start:    tk,
 		Key:      key,
 		Value:    value,
+	}
+}
+
+// MappingTemplate creates a node for a mapping value that is a template
+func MappingTemplate(tk *token.Token, template Node) *MappingValueNode {
+	return &MappingValueNode{
+		BaseNode: &BaseNode{},
+		Start:    tk,
+		Template: template,
 	}
 }
 
@@ -1031,9 +1060,10 @@ func (n *MappingKeyNode) String() string {
 // MappingValueNode type of mapping value
 type MappingValueNode struct {
 	*BaseNode
-	Start *token.Token
-	Key   Node
-	Value Node
+	Start    *token.Token
+	Template Node
+	Key      Node
+	Value    Node
 }
 
 // Replace replace value node.

@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/goccy/go-yaml/token"
+import "github.com/pgavlin/yomlette/token"
 
 // context context at parsing
 type context struct {
@@ -8,6 +8,8 @@ type context struct {
 	size   int
 	tokens token.Tokens
 	mode   Mode
+
+	funcs map[string]interface{}
 }
 
 func (c *context) next() bool {

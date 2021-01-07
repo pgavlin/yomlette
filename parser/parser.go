@@ -5,10 +5,10 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/goccy/go-yaml/ast"
-	"github.com/goccy/go-yaml/internal/errors"
-	"github.com/goccy/go-yaml/lexer"
-	"github.com/goccy/go-yaml/token"
+	"github.com/pgavlin/yomlette/ast"
+	"github.com/pgavlin/yomlette/internal/errors"
+	"github.com/pgavlin/yomlette/lexer"
+	"github.com/pgavlin/yomlette/token"
 	"golang.org/x/xerrors"
 )
 
@@ -186,40 +186,59 @@ func (p *parser) validateMapValue(ctx *context, key, value ast.Node) error {
 }
 
 func (p *parser) parseMappingValue(ctx *context) (ast.Node, error) {
-	key, err := p.parseMapKey(ctx)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse map key")
-	}
-	if err := p.validateMapKey(key.GetToken()); err != nil {
-		return nil, errors.Wrapf(err, "validate mapping key error")
-	}
-	ctx.progress(1)          // progress to mapping value token
-	tk := ctx.currentToken() // get mapping value token
-	ctx.progress(1)          // progress to value token
-	if err := p.setSameLineCommentIfExists(ctx, key); err != nil {
-		return nil, errors.Wrapf(err, "failed to set same line comment to node")
-	}
-	if key.GetComment() != nil {
-		// if current token is comment, GetComment() is not nil.
-		// then progress to value token
-		ctx.progressIgnoreComment(1)
+	var keyToken *token.Token
+	var valueToken *token.Token
+	var mvnode *ast.MappingValueNode
+	if tk := ctx.currentToken(); tk.Type == token.TemplateType {
+		template, err := p.parseTemplate(ctx)
+		if err != nil {
+			return nil, err
+		}
+		switch template.(type) {
+		case *ast.IfNode, *ast.RangeNode, *ast.WithNode:
+			keyToken, valueToken = tk, tk
+			mvnode = ast.MappingTemplate(tk, template)
+		default:
+			return nil, errors.ErrSyntax("expected a template control action", tk)
+		}
+	} else {
+		key, err := p.parseMapKey(ctx)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse map key")
+		}
+		if err := p.validateMapKey(key.GetToken()); err != nil {
+			return nil, errors.Wrapf(err, "validate mapping key error")
+		}
+		ctx.progress(1)                 // progress to mapping value token
+		valueToken = ctx.currentToken() // get mapping value token
+		ctx.progress(1)                 // progress to value token
+		if err := p.setSameLineCommentIfExists(ctx, key); err != nil {
+			return nil, errors.Wrapf(err, "failed to set same line comment to node")
+		}
+		if key.GetComment() != nil {
+			// if current token is comment, GetComment() is not nil.
+			// then progress to value token
+			ctx.progressIgnoreComment(1)
+		}
+
+		value, err := p.parseMapValue(ctx, key, tk)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse map value")
+		}
+		if err := p.validateMapValue(ctx, key, value); err != nil {
+			return nil, errors.Wrapf(err, "failed to validate map value")
+		}
+
+		keyToken = key.GetToken()
+		mvnode = ast.MappingValue(valueToken, key, value)
 	}
 
-	value, err := p.parseMapValue(ctx, key, tk)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse map value")
-	}
-	if err := p.validateMapValue(ctx, key, value); err != nil {
-		return nil, errors.Wrapf(err, "failed to validate map value")
-	}
-
-	mvnode := ast.MappingValue(tk, key, value)
-	node := ast.Mapping(tk, false, mvnode)
+	node := ast.Mapping(valueToken, false, mvnode)
 
 	ntk := ctx.nextNotCommentToken()
 	antk := ctx.afterNextNotCommentToken()
 	for antk != nil && antk.Type == token.MappingValueType &&
-		ntk.Position.Column == key.GetToken().Position.Column {
+		ntk.Position.Column == keyToken.Position.Column {
 		ctx.progressIgnoreComment(1)
 		value, err := p.parseToken(ctx, ctx.currentToken())
 		if err != nil {
@@ -538,6 +557,8 @@ func (p *parser) parseToken(ctx *context, tk *token.Token) (ast.Node, error) {
 		return p.parseTag(ctx)
 	case token.LiteralType, token.FoldedType:
 		return p.parseLiteral(ctx)
+	case token.TemplateType:
+		return p.parseTemplate(ctx)
 	}
 	return nil, nil
 }

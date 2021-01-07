@@ -3,12 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-colorable"
-	"github.com/pgavlin/yomlette/lexer"
 	"github.com/pgavlin/yomlette/parser"
 	"github.com/pgavlin/yomlette/printer"
 )
@@ -21,14 +19,14 @@ func format(attr color.Attribute) string {
 
 func _main(args []string) error {
 	if len(args) < 2 {
-		return errors.New("ycat: usage: ycat file.yml")
+		return errors.New("yparse: usage: yparse file.yml")
 	}
 	filename := args[1]
-	bytes, err := ioutil.ReadFile(filename)
+	file, err := parser.ParseFile(filename, parser.ParseComments)
 	if err != nil {
 		return err
 	}
-	tokens := lexer.Tokenize(string(bytes))
+
 	var p printer.Printer
 	p.LineNumber = true
 	p.LineNumberFormat = func(num int) string {
@@ -72,7 +70,9 @@ func _main(args []string) error {
 		}
 	}
 	writer := colorable.NewColorableStdout()
-	writer.Write([]byte(p.PrintTokens(tokens) + "\n"))
+	for _, doc := range file.Docs {
+		writer.Write([]byte("---\n" + string(p.PrintNode(doc)) + "\n"))
+	}
 	return nil
 }
 

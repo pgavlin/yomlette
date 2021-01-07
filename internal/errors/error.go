@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/goccy/go-yaml/printer"
-	"github.com/goccy/go-yaml/token"
+	"github.com/pgavlin/yomlette/printer"
+	"github.com/pgavlin/yomlette/token"
 	"golang.org/x/xerrors"
 )
 

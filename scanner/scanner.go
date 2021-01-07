@@ -4,7 +4,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/goccy/go-yaml/token"
+	"github.com/pgavlin/yomlette/token"
 	"golang.org/x/xerrors"
 )
 
@@ -39,6 +39,7 @@ type Scanner struct {
 	indentNum              int
 	isFirstCharAtLine      bool
 	isAnchor               bool
+	isTemplate             bool
 	startedFlowSequenceNum int
 	startedFlowMapNum      int
 	indentState            IndentState
@@ -377,6 +378,48 @@ func (s *Scanner) scanQuote(ctx *Context, ch rune) (tk *token.Token, pos int) {
 	return s.scanDoubleQuote(ctx)
 }
 
+func (s *Scanner) scanTemplateString(ctx *Context) {
+	ctx.addOriginBuf('"')
+	ctx.progress(1) // skip the '"'
+	for ctx.next() {
+		c := ctx.currentChar()
+		ctx.addOriginBuf(c)
+		ctx.progress(1)
+
+		if c == '\n' || c == '"' && ctx.previousChar() != '\\' {
+			return
+		}
+	}
+}
+
+func (s *Scanner) scanTemplate(ctx *Context) (tk *token.Token) {
+	pos := ctx.idx
+
+	ctx.addOriginBuf('{')
+	ctx.addOriginBuf('{')
+	ctx.progress(2) // skip the left delimiter "{{"
+
+	for ctx.next() {
+		c := ctx.currentChar()
+		switch c {
+		case '}':
+			if ctx.repeatNum('}') == 2 {
+				ctx.addOriginBuf('}')
+				ctx.addOriginBuf('}')
+				ctx.progress(2)
+
+				return token.Template(string(ctx.src[pos:ctx.idx]), string(ctx.obuf), s.pos())
+			}
+		case '"':
+			s.scanTemplateString(ctx)
+			continue
+		}
+		ctx.addOriginBuf(c)
+		ctx.progress(1)
+	}
+	return
+}
+
 func (s *Scanner) scanTag(ctx *Context) (tk *token.Token, pos int) {
 	ctx.addOriginBuf('!')
 	ctx.progress(1) // skip '!' character
@@ -534,7 +577,12 @@ func (s *Scanner) scan(ctx *Context) (pos int) {
 		}
 		switch c {
 		case '{':
-			if !ctx.existsBuffer() {
+			if ctx.repeatNum('{') == 2 {
+				s.addBufferedTokenIfExists(ctx)
+				ctx.addToken(s.scanTemplate(ctx))
+				pos = ctx.idx
+				return
+			} else if !ctx.existsBuffer() {
 				ctx.addOriginBuf(c)
 				ctx.addToken(token.MappingStart(string(ctx.obuf), s.pos()))
 				s.startedFlowMapNum++

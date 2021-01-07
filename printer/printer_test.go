@@ -3,8 +3,8 @@ package printer_test
 import (
 	"testing"
 
-	"github.com/goccy/go-yaml/lexer"
-	"github.com/goccy/go-yaml/printer"
+	"github.com/pgavlin/yomlette/lexer"
+	"github.com/pgavlin/yomlette/printer"
 )
 
 func Test_Printer(t *testing.T) {
