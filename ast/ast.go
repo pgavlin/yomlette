@@ -1519,6 +1519,7 @@ func Walk(v Visitor, node Node) {
 	case *MappingKeyNode:
 		Walk(v, n.Value)
 	case *MappingValueNode:
+		Walk(v, n.Template)
 		Walk(v, n.Key)
 		Walk(v, n.Value)
 	case *SequenceNode:
@@ -1530,6 +1531,88 @@ func Walk(v Visitor, node Node) {
 		Walk(v, n.Value)
 	case *AliasNode:
 		Walk(v, n.Value)
+	case *ActionNode:
+		if tv, ok := v.(TemplateVisitor); ok {
+			WalkTemplate(tv, n.Pipe)
+		}
+	case *IfNode:
+		if tv, ok := v.(TemplateVisitor); ok {
+			WalkTemplate(tv, n.Pipe)
+		}
+		for _, n := range n.List.Nodes {
+			Walk(v, n)
+		}
+		if n.ElseList != nil {
+			for _, n := range n.ElseList.Nodes {
+				Walk(v, n)
+			}
+		}
+	case *RangeNode:
+		if tv, ok := v.(TemplateVisitor); ok {
+			WalkTemplate(tv, n.Pipe)
+		}
+		for _, n := range n.List.Nodes {
+			Walk(v, n)
+		}
+		if n.ElseList != nil {
+			for _, n := range n.ElseList.Nodes {
+				Walk(v, n)
+			}
+		}
+	case *WithNode:
+		if tv, ok := v.(TemplateVisitor); ok {
+			WalkTemplate(tv, n.Pipe)
+		}
+		for _, n := range n.List.Nodes {
+			Walk(v, n)
+		}
+		if n.ElseList != nil {
+			for _, n := range n.ElseList.Nodes {
+				Walk(v, n)
+			}
+		}
+	case *TemplateInvokeNode:
+		if tv, ok := v.(TemplateVisitor); ok {
+			WalkTemplate(tv, n.Pipe)
+		}
+	}
+}
+
+// TemplateVisitor has Visit method that is invokded for each node encountered by WalkTemplate.
+// If the result visitor w is not nil, Walk visits each of the children of node with the visitor w,
+// followed by a call of w.Visit(nil).
+type TemplateVisitor interface {
+	VisitTemplate(TemplateNode) TemplateVisitor
+}
+
+// WalkTemplate traverses a template AST in depth-first order: It starts by calling v.VisitTemplate(node); node must not be nil.
+// If the visitor w returned by v.VisitTemplate(node) is not nil,
+// WalkTemplate is invoked recursively with visitor w for each of the non-nil children of node,
+// followed by a call of w.VisitTemplate(nil).
+func WalkTemplate(v TemplateVisitor, node TemplateNode) {
+	if v = v.VisitTemplate(node); v == nil {
+		return
+	}
+
+	switch n := node.(type) {
+	case *DotNode:
+	case *FieldNode:
+	case *IdentifierNode:
+	case *NilNode:
+	case *TemplateBoolNode:
+	case *TemplateNumberNode:
+	case *TemplateStringNode:
+	case *VariableNode:
+	case *ChainNode:
+		WalkTemplate(v, n.Node)
+	case *CommandNode:
+		for _, arg := range n.Args {
+			WalkTemplate(v, arg)
+		}
+	case *PipeNode:
+		for _, cmd := range n.Cmds {
+			WalkTemplate(v, cmd)
+		}
 	}
 }
 

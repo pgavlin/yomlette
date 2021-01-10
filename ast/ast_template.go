@@ -37,6 +37,35 @@ const (
 	TemplateNodeVariable                           // A $ variable.
 )
 
+// String template node type identifier to text
+func (t TemplateNodeType) String() string {
+	switch t {
+	case TemplateNodeBool:
+		return "Bool"
+	case TemplateNodeChain:
+		return "Chain"
+	case TemplateNodeCommand:
+		return "Command"
+	case TemplateNodeDot:
+		return "Dot"
+	case TemplateNodeField:
+		return "Field"
+	case TemplateNodeIdentifier:
+		return "Identifier"
+	case TemplateNodeNil:
+		return "Nil"
+	case TemplateNodeNumber:
+		return "Number"
+	case TemplateNodePipe:
+		return "Pipe"
+	case TemplateNodeString:
+		return "String"
+	case TemplateNodeVariable:
+		return "Variable"
+	}
+	return ""
+}
+
 // PipeNode holds a pipeline with optional declaration
 type PipeNode struct {
 	IsAssign bool            // The variables are being assigned, not declared.
