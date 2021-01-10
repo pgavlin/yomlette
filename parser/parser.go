@@ -13,7 +13,7 @@ import (
 
 type parser struct{}
 
-func (p *parser) parseMapping(ctx *context) (ast.Node, error) {
+func (p *parser) parseFlowMapping(ctx *context) (ast.Node, error) {
 	node := ast.Mapping(ctx.currentToken(), true)
 	ctx.progress(1) // skip MappingStart token
 	for ctx.next() {
@@ -26,15 +26,11 @@ func (p *parser) parseMapping(ctx *context) (ast.Node, error) {
 			continue
 		}
 
-		value, err := p.parseMappingValue(ctx, nil)
+		value, err := p.parseMappingValue(ctx)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse mapping value in mapping node")
 		}
-		mvnode, ok := value.(*ast.MappingValueNode)
-		if !ok {
-			return nil, errors.ErrSyntax("failed to parse flow mapping node", value.GetToken())
-		}
-		node.Values = append(node.Values, mvnode)
+		node.Values = append(node.Values, value)
 		ctx.progress(1)
 	}
 	return node, nil
@@ -74,7 +70,7 @@ func (p *parser) parseTag(ctx *context) (ast.Node, error) {
 	switch token.ReservedTagKeyword(tagToken.Value) {
 	case token.MappingTag,
 		token.OrderedMapTag:
-		value, err = p.parseMapping(ctx)
+		value, err = p.parseFlowMapping(ctx)
 	case token.IntegerTag,
 		token.FloatTag,
 		token.StringTag,
@@ -184,26 +180,31 @@ func (p *parser) validateMapValue(ctx *context, key, value ast.Node) error {
 	return nil
 }
 
-func (p *parser) continueMapping(ctx *context, node *ast.MappingNode, mappingValue *ast.MappingValueNode) (ast.Node, error) {
-	if node == nil {
-		node = ast.Mapping(mappingValue.GetToken(), false)
+func (p *parser) parseBlockMapping(ctx *context) (*ast.MappingNode, error) {
+	start, err := p.parseMappingValue(ctx)
+	if err != nil {
+		return nil, err
 	}
-	node.Values = append(node.Values, mappingValue)
+	node := ast.Mapping(start.GetToken(), false, start)
 
-	ntk := ctx.nextNotCommentToken()
-	antk := ctx.afterNextNotCommentToken()
-	if antk == nil || antk.Type != token.MappingValueType || ntk.Position.Column != node.GetToken().Position.Column {
-		if len(node.Values) == 1 {
-			return node.Values[0], nil
+	for {
+		ntk := ctx.nextNotCommentToken()
+		antk := ctx.afterNextNotCommentToken()
+		if antk == nil || antk.Type != token.MappingValueType || ntk.Position.Column != node.GetToken().Position.Column {
+			return node, nil
 		}
-		return node, nil
-	}
 
-	ctx.progressIgnoreComment(1)
-	return p.parseMappingValue(ctx, node)
+		ctx.progressIgnoreComment(1)
+
+		value, err := p.parseMappingValue(ctx)
+		if err != nil {
+			return nil, err
+		}
+		node.Values = append(node.Values, value)
+	}
 }
 
-func (p *parser) parseMappingValue(ctx *context, node *ast.MappingNode) (ast.Node, error) {
+func (p *parser) parseMappingValue(ctx *context) (*ast.MappingValueNode, error) {
 	var comment *ast.CommentNode
 	if ctx.currentToken().Type == token.CommentType {
 		c, err := p.parseComment(ctx)
@@ -224,7 +225,7 @@ func (p *parser) parseMappingValue(ctx *context, node *ast.MappingNode) (ast.Nod
 			if comment != nil {
 				mv.SetComment(comment.GetToken())
 			}
-			return p.continueMapping(ctx, node, mv)
+			return mv, nil
 		}
 		return nil, errors.ErrSyntax("expected a template control action", tk)
 	}
@@ -260,7 +261,7 @@ func (p *parser) parseMappingValue(ctx *context, node *ast.MappingNode) (ast.Nod
 	if comment != nil {
 		mv.SetComment(comment.GetToken())
 	}
-	return p.continueMapping(ctx, node, mv)
+	return mv, nil
 }
 
 func (p *parser) parseSequenceEntry(ctx *context) (ast.Node, error) {
@@ -507,8 +508,7 @@ func (p *parser) parseToken(ctx *context, tk *token.Token) (ast.Node, error) {
 		return nil, nil
 	}
 	if tk.NextType() == token.MappingValueType {
-		node, err := p.parseMappingValue(ctx, nil)
-		return node, err
+		return p.parseBlockMapping(ctx)
 	}
 	node, err := p.parseScalarValueWithComment(ctx, tk)
 	if err != nil {
@@ -539,7 +539,7 @@ func (p *parser) parseToken(ctx *context, tk *token.Token) (ast.Node, error) {
 	case token.DocumentHeaderType:
 		return p.parseDocument(ctx)
 	case token.MappingStartType:
-		return p.parseMapping(ctx)
+		return p.parseFlowMapping(ctx)
 	case token.SequenceStartType:
 		return p.parseSequence(ctx)
 	case token.SequenceEntryType:
