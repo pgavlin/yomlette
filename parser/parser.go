@@ -187,7 +187,6 @@ func (p *parser) validateMapValue(ctx *context, key, value ast.Node) error {
 
 func (p *parser) parseMappingValue(ctx *context) (ast.Node, error) {
 	var keyToken *token.Token
-	var valueToken *token.Token
 	var mvnode *ast.MappingValueNode
 	if tk := ctx.currentToken(); tk.Type == token.TemplateType {
 		template, err := p.parseTemplate(ctx)
@@ -196,7 +195,7 @@ func (p *parser) parseMappingValue(ctx *context) (ast.Node, error) {
 		}
 		switch template.(type) {
 		case *ast.IfNode, *ast.RangeNode, *ast.WithNode:
-			keyToken, valueToken = tk, tk
+			keyToken = tk
 			mvnode = ast.MappingTemplate(tk, template)
 		default:
 			return nil, errors.ErrSyntax("expected a template control action", tk)
@@ -209,9 +208,8 @@ func (p *parser) parseMappingValue(ctx *context) (ast.Node, error) {
 		if err := p.validateMapKey(key.GetToken()); err != nil {
 			return nil, errors.Wrapf(err, "validate mapping key error")
 		}
-		ctx.progress(1)                 // progress to mapping value token
-		valueToken = ctx.currentToken() // get mapping value token
-		ctx.progress(1)                 // progress to value token
+		ctx.progress(1) // progress to mapping value token
+		ctx.progress(1) // progress to value token
 		if err := p.setSameLineCommentIfExists(ctx, key); err != nil {
 			return nil, errors.Wrapf(err, "failed to set same line comment to node")
 		}
@@ -230,10 +228,10 @@ func (p *parser) parseMappingValue(ctx *context) (ast.Node, error) {
 		}
 
 		keyToken = key.GetToken()
-		mvnode = ast.MappingValue(valueToken, key, value)
+		mvnode = ast.MappingValue(keyToken, key, value)
 	}
 
-	node := ast.Mapping(valueToken, false, mvnode)
+	node := ast.Mapping(keyToken, false, mvnode)
 
 	ntk := ctx.nextNotCommentToken()
 	antk := ctx.afterNextNotCommentToken()
