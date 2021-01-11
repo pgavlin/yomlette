@@ -74,6 +74,9 @@ func TestParser(t *testing.T) {
   ? !!str "implicit" : !!str "entry",
   ? !!null "" : !!null "",
 }`,
+		`simple: {{ "value template" }}`,
+		`mapping:\n  {{ if true }}\n  key: value\n  {{ else }}\n  key: otherValue\n  {{ end }}`,
+		`mapping:\n  child:\n    {{ if true }}\n    key: value\n    {{ end }}\n  {{ if false }} key: otherValue {{ end }}`,
 	}
 	for _, src := range sources {
 		if _, err := parser.Parse(lexer.Tokenize(src), 0); err != nil {

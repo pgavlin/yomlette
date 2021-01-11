@@ -64,24 +64,29 @@ func (p *parser) parseTemplate(ctx *context) (ast.Node, error) {
 }
 
 func (t *templateContext) nextNode() item {
+	ntk := t.ctx.nextNotCommentToken()
+
 	t.ctx.progressIgnoreComment(1)
 	if !t.ctx.next() {
-		// TODO: attach comment to node
 		return item{typ: itemEOF}
 	}
 
 	// If the current token is not a template token, parse the next YAML fragment.
-	tk := t.ctx.currentToken()
-	if tk.Type != token.TemplateType {
-		node, err := t.p.parseToken(t.ctx, tk)
+	if ntk == nil || ntk.Type != token.TemplateType {
+		node, err := t.p.parseToken(t.ctx, t.ctx.currentToken())
 		if err != nil {
 			t.error(err)
 		}
 		return item{typ: itemYaml, node: node}
 	}
 
+	// TODO: this drops any comments.
+	for t.ctx.currentToken().Type != token.TemplateType {
+		t.ctx.progressIgnoreComment(1)
+	}
+
 	// Otherwise, extract the template text and start a new lexer.
-	t.lex = lex(t.name, tk, t.lex.leftDelim, t.lex.rightDelim)
+	t.lex = lex(t.name, t.ctx.currentToken(), t.lex.leftDelim, t.lex.rightDelim)
 	return t.lex.nextItem()
 }
 
