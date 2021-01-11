@@ -17,6 +17,11 @@ import (
 const (
 	nodeEnd  = -1
 	nodeElse = -2
+
+	valueTemplate        = 0
+	mappingValueTemplate = 1
+	toplevelTemplate     = 2
+	peekTemplate         = 3
 )
 
 type templateContext struct {
@@ -25,7 +30,7 @@ type templateContext struct {
 
 	name      string
 	parseName string
-	toplevel  bool
+	kind      int
 	root      *ast.NodeList
 
 	funcs     []map[string]interface{}
@@ -36,7 +41,7 @@ type templateContext struct {
 	treeSet   map[string]*templateContext
 }
 
-func (p *parser) parseTemplate(ctx *context) (ast.Node, error) {
+func (p *parser) parseTemplate(ctx *context, mappingValue bool) (ast.Node, error) {
 	tk := ctx.currentToken()
 	if tk.Type != token.TemplateType {
 		return nil, errors.ErrSyntax("expected template token", tk)
@@ -44,7 +49,7 @@ func (p *parser) parseTemplate(ctx *context) (ast.Node, error) {
 
 	treeSet := make(map[string]*templateContext)
 	toplevel := tk.Position.Column == 1
-	t := newTemplateContext("template", toplevel)
+	t := newTemplateContext("template", toplevel, mappingValue, false)
 	_, err := t.Parse(tk, leftDelim, rightDelim, ctx, treeSet, ctx.funcs, builtins)
 	if err != nil {
 		return nil, err
@@ -63,8 +68,39 @@ func (p *parser) parseTemplate(ctx *context) (ast.Node, error) {
 	}
 }
 
+func (p *parser) peekTemplateBody(ctx *context, next bool) (*token.Token, *token.Token) {
+	cursor := ctx.idx
+	defer func() {
+		ctx.idx = cursor
+	}()
+
+	// If the template token we're peeking at starts at the next token rathen than the current token, bump the token
+	// index forwards once.
+	if next {
+		ctx.progressIgnoreComment(1)
+	}
+
+	// Skip any preceding comments.
+	for ctx.currentToken().Type == token.CommentType {
+		ctx.progressIgnoreComment(1)
+	}
+
+	treeSet := make(map[string]*templateContext)
+	t := newTemplateContext("template", false, false, true)
+	_, err := t.Parse(ctx.currentToken(), leftDelim, rightDelim, ctx, treeSet, ctx.funcs, builtins)
+	if err == nil {
+		// If we successfully parsed a template, then the template has no body. Ignore it.
+		return nil, nil
+	}
+
+	return ctx.nextNotCommentToken(), ctx.afterNextNotCommentToken()
+}
+
 func (t *templateContext) nextNode() item {
 	ntk := t.ctx.nextNotCommentToken()
+	if t.kind == peekTemplate && (ntk == nil || ntk.Type != token.TemplateType) {
+		return item{typ: itemEOF}
+	}
 
 	t.ctx.progressIgnoreComment(1)
 	if !t.ctx.next() {
@@ -73,6 +109,14 @@ func (t *templateContext) nextNode() item {
 
 	// If the current token is not a template token, parse the next YAML fragment.
 	if ntk == nil || ntk.Type != token.TemplateType {
+		if t.kind == mappingValueTemplate {
+			node, err := t.p.parseMappingValue(t.ctx)
+			if err != nil {
+				t.error(err)
+			}
+			return item{typ: itemYaml, node: node}
+		}
+
 		node, err := t.p.parseToken(t.ctx, t.ctx.currentToken())
 		if err != nil {
 			t.error(err)
@@ -159,11 +203,21 @@ func (t *templateContext) peekNonSpace() item {
 // Parsing.
 
 // newTemplateContext allocates a new parse tree with the given name.
-func newTemplateContext(name string, toplevel bool, funcs ...map[string]interface{}) *templateContext {
+func newTemplateContext(name string, toplevel, mappingValue, peek bool, funcs ...map[string]interface{}) *templateContext {
+	kind := valueTemplate
+	switch {
+	case peek:
+		kind = peekTemplate
+	case mappingValue:
+		kind = mappingValueTemplate
+	case toplevel:
+		kind = toplevelTemplate
+	}
+
 	return &templateContext{
-		name:     name,
-		toplevel: toplevel,
-		funcs:    funcs,
+		name:  name,
+		kind:  kind,
+		funcs: funcs,
 	}
 }
 
@@ -266,10 +320,13 @@ func (t *templateContext) add() {
 // as itemList except it also parses {{define}} actions.
 // It runs to EOF.
 func (t *templateContext) parse() {
-	if !t.toplevel {
+	if t.kind != toplevelTemplate {
 		t.expect(itemLeftDelim, "template")
 		n := t.action()
 		switch n.Type() {
+		case ast.IfType, ast.RangeType, ast.WithType:
+			// Consume the last token from the template body.
+			//t.ctx.progressIgnoreComment(1)
 		case nodeEnd, nodeElse:
 			t.errorf("unexpected %s", n)
 		}
@@ -282,7 +339,7 @@ func (t *templateContext) parse() {
 		if t.peek().typ == itemLeftDelim {
 			delim := t.next()
 			if t.nextNonSpace().typ == itemDefine {
-				newT := newTemplateContext("definition", true) // name will be updated once we know it.
+				newT := newTemplateContext("definition", true, false, t.kind == peekTemplate) // name will be updated once we know it.
 				newT.parseName = t.parseName
 				newT.startParse(t.funcs, t.lex, t.ctx, t.treeSet)
 				newT.parseDefinition()
@@ -546,7 +603,7 @@ func (t *templateContext) blockControl(tk *token.Token) ast.Node {
 	name := t.parseTemplateName(token, context)
 	pipe := t.pipeline(context)
 
-	block := newTemplateContext(name, true) // name will be updated once we know it.
+	block := newTemplateContext(name, true, false, t.kind == peekTemplate) // name will be updated once we know it.
 	block.parseName = t.parseName
 	block.startParse(t.funcs, t.lex, t.ctx, t.treeSet)
 	var end ast.Node
@@ -670,9 +727,6 @@ func (t *templateContext) term() ast.TemplateNode {
 	case itemError:
 		t.errorf("%s", token.val)
 	case itemIdentifier:
-		if !t.hasFunction(token.val) {
-			t.errorf("function %q not defined", token.val)
-		}
 		return ast.Identifier(token.val)
 	case itemDot:
 		return ast.Dot()

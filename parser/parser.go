@@ -187,13 +187,7 @@ func (p *parser) parseBlockMapping(ctx *context) (*ast.MappingNode, error) {
 	}
 	node := ast.Mapping(start.GetToken(), false, start)
 
-	for {
-		ntk := ctx.nextNotCommentToken()
-		antk := ctx.afterNextNotCommentToken()
-		if antk == nil || antk.Type != token.MappingValueType || ntk.Position.Column != node.GetToken().Position.Column {
-			return node, nil
-		}
-
+	for p.continueMapping(ctx, node) {
 		ctx.progressIgnoreComment(1)
 
 		value, err := p.parseMappingValue(ctx)
@@ -202,6 +196,19 @@ func (p *parser) parseBlockMapping(ctx *context) (*ast.MappingNode, error) {
 		}
 		node.Values = append(node.Values, value)
 	}
+	return node, nil
+}
+
+func (p *parser) continueMapping(ctx *context, node *ast.MappingNode) bool {
+	ntk := ctx.nextNotCommentToken()
+	antk := ctx.afterNextNotCommentToken()
+	if ntk != nil && ntk.Type == token.TemplateType {
+		tbody, afterTBody := p.peekTemplateBody(ctx, true)
+		if tbody != nil {
+			ntk, antk = tbody, afterTBody
+		}
+	}
+	return antk != nil && antk.Type == token.MappingValueType && ntk.Position.Column == node.GetToken().Position.Column
 }
 
 func (p *parser) parseMappingValue(ctx *context) (*ast.MappingValueNode, error) {
@@ -215,19 +222,15 @@ func (p *parser) parseMappingValue(ctx *context) (*ast.MappingValueNode, error) 
 	}
 
 	if tk := ctx.currentToken(); tk.Type == token.TemplateType {
-		template, err := p.parseTemplate(ctx)
+		template, err := p.parseTemplate(ctx, true)
 		if err != nil {
 			return nil, err
 		}
-		switch template.(type) {
-		case *ast.IfNode, *ast.RangeNode, *ast.WithNode:
-			mv := ast.MappingTemplate(tk, template)
-			if comment != nil {
-				mv.SetComment(comment.GetToken())
-			}
-			return mv, nil
+		mv := ast.MappingTemplate(tk, template)
+		if comment != nil {
+			mv.SetComment(comment.GetToken())
 		}
-		return nil, errors.ErrSyntax("expected a template control action", tk)
+		return mv, nil
 	}
 
 	key, err := p.parseMapKey(ctx)
@@ -555,7 +558,11 @@ func (p *parser) parseToken(ctx *context, tk *token.Token) (ast.Node, error) {
 	case token.LiteralType, token.FoldedType:
 		return p.parseLiteral(ctx)
 	case token.TemplateType:
-		return p.parseTemplate(ctx)
+		_, antk := p.peekTemplateBody(ctx, false)
+		if antk != nil && antk.Type == token.MappingValueType {
+			return p.parseBlockMapping(ctx)
+		}
+		return p.parseTemplate(ctx, false)
 	}
 	return nil, nil
 }
