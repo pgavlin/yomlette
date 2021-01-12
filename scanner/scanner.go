@@ -27,7 +27,6 @@ const (
 type Scanner struct {
 	source                 []rune
 	sourcePos              int
-	sourceSize             int
 	line                   int
 	column                 int
 	offset                 int
@@ -774,7 +773,6 @@ func (s *Scanner) Init(text string) {
 	src := []rune(text)
 	s.source = src
 	s.sourcePos = 0
-	s.sourceSize = len(src)
 	s.line = 1
 	s.column = 1
 	s.offset = 1
@@ -788,7 +786,7 @@ func (s *Scanner) Init(text string) {
 
 // Scan scans the next token and returns the token collection. The source end is indicated by io.EOF.
 func (s *Scanner) Scan() (token.Tokens, error) {
-	if s.sourcePos >= s.sourceSize {
+	if s.sourcePos >= len(s.source) {
 		return nil, io.EOF
 	}
 	ctx := newContext(s.source[s.sourcePos:])
