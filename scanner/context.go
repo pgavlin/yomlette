@@ -122,7 +122,7 @@ func (c *Context) removeRightSpaceFromBuf() int {
 	return diff
 }
 
-func (c *Context) isDocument() bool {
+func (c *Context) isBlockScalar() bool {
 	return c.isLiteral || c.isFolded || c.isRawFolded
 }
 
@@ -186,7 +186,7 @@ func (c *Context) existsBuffer() bool {
 
 func (c *Context) bufferedSrc() []rune {
 	src := c.buf[:c.notSpaceCharPos]
-	if len(src) > 0 && src[len(src)-1] == '\n' && c.isDocument() && c.literalOpt == "-" {
+	if len(src) > 0 && src[len(src)-1] == '\n' && c.isBlockScalar() && c.literalOpt == "-" {
 		// remove end '\n' character
 		src = src[:len(src)-1]
 	}
@@ -202,7 +202,7 @@ func (c *Context) bufferedToken() *token.Token {
 		return nil
 	}
 	var tk *token.Token
-	if c.isDocument() {
+	if c.isBlockScalar() {
 		tk = token.String(string(source), string(c.obuf), c.bufPos)
 	} else {
 		tk = token.New(string(source), string(c.obuf), c.bufPos)
