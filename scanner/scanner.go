@@ -478,6 +478,16 @@ func (s *Scanner) scanLiteralHeader(ctx *Context) (pos int, err error) {
 }
 
 func (s *Scanner) scanNewLine(ctx *Context, c rune) {
+	// There is no problem that we ignore CR which followed by LF and normalize it to LF, because of following YAML1.2 spec.
+	// > Line breaks inside scalar content must be normalized by the YAML processor. Each such line break must be parsed into a single line feed character.
+	// > Outside scalar content, YAML allows any line break to be used to terminate lines.
+	// > -- https://yaml.org/spec/1.2/spec.html
+	if c == '\r' && ctx.nextChar() == '\n' {
+		ctx.addOriginBuf('\r')
+		ctx.progress(1)
+		c = '\n'
+	}
+
 	// if the following case, origin buffer has unnecessary two spaces.
 	// So, `removeRightSpaceFromOriginBuf` remove them, also fix column number too.
 	// ---
@@ -699,15 +709,6 @@ func (s *Scanner) scan(ctx *Context) (pos int) {
 				return
 			}
 		case '\r', '\n':
-			// There is no problem that we ignore CR which followed by LF and normalize it to LF, because of following YAML1.2 spec.
-			// > Line breaks inside scalar content must be normalized by the YAML processor. Each such line break must be parsed into a single line feed character.
-			// > Outside scalar content, YAML allows any line break to be used to terminate lines.
-			// > -- https://yaml.org/spec/1.2/spec.html
-			if c == '\r' && ctx.nextChar() == '\n' {
-				ctx.addOriginBuf('\r')
-				ctx.progress(1)
-				c = '\n'
-			}
 			s.scanNewLine(ctx, c)
 			continue
 		case ' ':
