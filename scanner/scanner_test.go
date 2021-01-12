@@ -31,3 +31,29 @@ func TestSingleQuote(t *testing.T) {
 		})
 	}
 }
+
+func TestDoubleQuote(t *testing.T) {
+	cases := map[string]string{
+		`"foo"`:     `foo`,
+		`"\"foo"`:   `"foo`,
+		`"foo\""`:   `foo"`,
+		`"'foo'"`:   `'foo'`,
+		`"f\"oo"`:   `f"oo`,
+		`"f\x22oo"`: `f"oo`,
+	}
+	for input, expected := range cases {
+		t.Run(input, func(t *testing.T) {
+			var s Scanner
+			s.Init(input)
+			tokens, err := s.Scan()
+			if !assert.NoError(t, err) {
+				return
+			}
+			if !assert.Len(t, tokens, 1) {
+				return
+			}
+			assert.Equal(t, token.DoubleQuoteType, tokens[0].Type)
+			assert.Equal(t, expected, tokens[0].Value)
+		})
+	}
+}

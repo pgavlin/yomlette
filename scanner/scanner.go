@@ -241,132 +241,110 @@ func hexToInt(b rune) int {
 	return int(b) - '0'
 }
 
-func hexRunesToInt(b []rune) int {
+func hexRunesToCode(b []rune) rune {
 	sum := 0
 	for i := 0; i < len(b); i++ {
 		sum += hexToInt(b[i]) << (uint(len(b)-i-1) * 4)
 	}
-	return sum
+	return rune(sum)
+}
+
+func (s *Scanner) decodeEscapeSequence(ctx *Context) (int, []rune) {
+	if ctx.idx+1 >= len(ctx.src) {
+		return 0, nil
+	}
+
+	nextChar := ctx.src[ctx.idx+1]
+	switch nextChar {
+	case 'b':
+		return 1, []rune{'\b'}
+	case 'e':
+		return 1, []rune{'\x1b'}
+	case 'f':
+		return 1, []rune{'\f'}
+	case 'n':
+		return 1, []rune{'\n'}
+	case 'v':
+		return 1, []rune{'\v'}
+	case 'L': // LS (#x2028)
+		return 1, []rune{'\xE2', '\x80', '\xA8'}
+	case 'N': // NEL (#x85)
+		return 1, []rune{'\xC2', '\x85'}
+	case 'P': // PS (#x2029)
+		return 1, []rune{'\xE2', '\x80', '\xA9'}
+	case '_': // #xA0
+		return 1, []rune{'\xC2', '\xA0'}
+	case '"':
+		return 1, []rune{'"'}
+	case '\\':
+		return 1, []rune{'\\'}
+	case 'x':
+		if ctx.idx+3 >= len(ctx.src) {
+			// TODO: need to return error
+			//err = xerrors.New("invalid escape character \\x")
+			return 0, nil
+		}
+		codeNum := hexRunesToCode(ctx.src[ctx.idx+2 : ctx.idx+4])
+		return 3, []rune{codeNum}
+	case 'u':
+		if ctx.idx+5 >= len(ctx.src) {
+			// TODO: need to return error
+			//err = xerrors.New("invalid escape character \\u")
+			return 0, nil
+		}
+		codeNum := hexRunesToCode(ctx.src[ctx.idx+2 : ctx.idx+6])
+		return 5, []rune{codeNum}
+	case 'U':
+		if ctx.idx+9 >= len(ctx.src) {
+			// TODO: need to return error
+			//err = xerrors.New("invalid escape character \\U")
+			return 0, nil
+		}
+		codeNum := hexRunesToCode(ctx.src[ctx.idx+2 : ctx.idx+10])
+		return 9, []rune{codeNum}
+	default:
+		return 0, nil
+	}
 }
 
 func (s *Scanner) scanDoubleQuote(ctx *Context) (tk *token.Token, pos int) {
 	ctx.addOriginBuf('"')
-	startIndex := ctx.idx + 1
 	ctx.progress(1)
-	src := ctx.src
-	size := len(src)
-	value := []rune{}
+
+	length := 1
 	isFirstLineChar := false
-	for idx := startIndex; idx < size; idx++ {
-		c := src[idx]
-		pos = idx + 1
+	var value strings.Builder
+	for ; ctx.idx < len(ctx.src); ctx.idx, length = ctx.idx+1, length+1 {
+		c := ctx.src[ctx.idx]
 		ctx.addOriginBuf(c)
-		if s.isNewLineChar(c) {
-			value = append(value, ' ')
+
+		switch {
+		case s.isNewLineChar(c):
+			value.WriteRune(' ')
 			isFirstLineChar = true
-			continue
-		} else if c == ' ' && isFirstLineChar {
-			continue
-		} else if c == '\\' {
-			isFirstLineChar = false
-			if idx+1 < size {
-				nextChar := src[idx+1]
-				switch nextChar {
-				case 'b':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, '\b')
-					idx++
-					continue
-				case 'e':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, '\x1B')
-					idx++
-					continue
-				case 'f':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, '\f')
-					idx++
-					continue
-				case 'n':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, '\n')
-					idx++
-					continue
-				case 'v':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, '\v')
-					idx++
-					continue
-				case 'L': // LS (#x2028)
-					ctx.addOriginBuf(nextChar)
-					value = append(value, []rune{'\xE2', '\x80', '\xA8'}...)
-					idx++
-					continue
-				case 'N': // NEL (#x85)
-					ctx.addOriginBuf(nextChar)
-					value = append(value, []rune{'\xC2', '\x85'}...)
-					idx++
-					continue
-				case 'P': // PS (#x2029)
-					ctx.addOriginBuf(nextChar)
-					value = append(value, []rune{'\xE2', '\x80', '\xA9'}...)
-					idx++
-					continue
-				case '_': // #xA0
-					ctx.addOriginBuf(nextChar)
-					value = append(value, []rune{'\xC2', '\xA0'}...)
-					idx++
-					continue
-				case '"':
-					ctx.addOriginBuf(nextChar)
-					value = append(value, nextChar)
-					idx++
-					continue
-				case 'x':
-					if idx+3 >= size {
-						// TODO: need to return error
-						//err = xerrors.New("invalid escape character \\x")
-						return
-					}
-					codeNum := hexRunesToInt(src[idx+2 : idx+4])
-					value = append(value, rune(codeNum))
-					idx += 3
-					continue
-				case 'u':
-					if idx+5 >= size {
-						// TODO: need to return error
-						//err = xerrors.New("invalid escape character \\u")
-						return
-					}
-					codeNum := hexRunesToInt(src[idx+2 : idx+6])
-					value = append(value, rune(codeNum))
-					idx += 5
-					continue
-				case 'U':
-					if idx+9 >= size {
-						// TODO: need to return error
-						//err = xerrors.New("invalid escape character \\U")
-						return
-					}
-					codeNum := hexRunesToInt(src[idx+2 : idx+10])
-					value = append(value, rune(codeNum))
-					idx += 9
-					continue
-				case '\\':
-					ctx.addOriginBuf(nextChar)
-					idx++
-				}
+		case c == ' ' && isFirstLineChar:
+			// Ignore leading spaces
+		case c == '\\':
+			escapeLen, runes := s.decodeEscapeSequence(ctx)
+			if escapeLen != 0 {
+				ctx.appendOriginBuf(ctx.src[ctx.idx+1 : ctx.idx+1+escapeLen]...)
+				ctx.idx, length = ctx.idx+escapeLen, length+escapeLen
+			} else {
+				runes = []rune{'\\'}
 			}
-			value = append(value, c)
-			continue
-		} else if c != '"' {
-			value = append(value, c)
+
+			for _, r := range runes {
+				value.WriteRune(r)
+			}
 			isFirstLineChar = false
-			continue
+		case c == '"':
+			tk = token.DoubleQuote(value.String(), string(ctx.obuf), s.pos())
+			pos = length
+			return
+		default:
+			value.WriteRune(c)
+			isFirstLineChar = false
 		}
-		tk = token.DoubleQuote(string(value), string(ctx.obuf), s.pos())
-		pos = idx - startIndex + 1
-		return
 	}
 	return
 }

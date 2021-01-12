@@ -100,6 +100,12 @@ func (c *Context) addOriginBuf(r rune) {
 	}
 }
 
+func (c *Context) appendOriginBuf(runes ...rune) {
+	for _, r := range runes {
+		c.addOriginBuf(r)
+	}
+}
+
 func (c *Context) removeRightSpaceFromBuf() int {
 	trimmedBuf := c.obuf[:c.notSpaceOrgCharPos]
 	buflen := len(trimmedBuf)
