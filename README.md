@@ -3,6 +3,7 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/pgavlin/yomlette)](https://pkg.go.dev/github.com/pgavlin/yomlette)
 [![codecov](https://codecov.io/gh/pgavlin/yomlette/branch/master/graph/badge.svg)](https://codecov.io/gh/pgavlin/yomlette)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pgavlin/yomlette)](https://goreportcard.com/report/github.com/pgavlin/yomlette)
+[![Test](https://github.com/pgavlin/yomlette/workflows/Test/badge.svg)](https://github.com/pgavlin/yomlette/actions?query=workflow%3ATest)
 
 # Why?!
 
