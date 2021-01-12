@@ -196,37 +196,37 @@ func (s *Scanner) breakLiteral(ctx *Context) {
 
 func (s *Scanner) scanSingleQuote(ctx *Context) (tk *token.Token, pos int) {
 	ctx.addOriginBuf('\'')
-	startIndex := ctx.idx + 1
 	ctx.progress(1)
-	src := ctx.src
-	size := len(src)
-	value := []rune{}
+
+	length := 1
 	isFirstLineChar := false
-	for idx := startIndex; idx < size; idx++ {
-		c := src[idx]
-		pos = idx + 1
+	var value strings.Builder
+	for ; ctx.idx < len(ctx.src); ctx.idx, length = ctx.idx+1, length+1 {
+		c := ctx.src[ctx.idx]
 		ctx.addOriginBuf(c)
-		if s.isNewLineChar(c) {
-			value = append(value, ' ')
+
+		switch {
+		case s.isNewLineChar(c):
+			value.WriteRune(' ')
 			isFirstLineChar = true
-			continue
-		} else if c == ' ' && isFirstLineChar {
-			continue
-		} else if c != '\'' {
-			value = append(value, c)
-			isFirstLineChar = false
-			continue
-		}
-		if idx+1 < len(ctx.src) && ctx.src[idx+1] == '\'' {
+		case c == ' ' && isFirstLineChar:
+			// Ignore leading spaces
+		case c == '\'':
+			isEscaped := ctx.idx+1 < len(ctx.src) && ctx.src[ctx.idx+1] == '\''
+			if !isEscaped {
+				tk = token.SingleQuote(value.String(), string(ctx.obuf), s.pos())
+				pos = length
+				return
+			}
+
 			// '' handle as ' character
-			value = append(value, c)
+			value.WriteRune(c)
 			ctx.addOriginBuf(c)
-			idx++
-			continue
+			ctx.idx, length = ctx.idx+1, length+1
+		default:
+			value.WriteRune(c)
+			isFirstLineChar = false
 		}
-		tk = token.SingleQuote(string(value), string(ctx.obuf), s.pos())
-		pos = idx - startIndex + 1
-		return
 	}
 	return
 }
