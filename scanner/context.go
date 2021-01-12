@@ -13,6 +13,7 @@ type Context struct {
 	notSpaceCharPos    int
 	notSpaceOrgCharPos int
 	src                []rune
+	bufPos             *token.Position
 	buf                []rune
 	obuf               []rune
 	tokens             token.Tokens
@@ -59,6 +60,7 @@ func (c *Context) reset(src []rune) {
 }
 
 func (c *Context) resetBuffer() {
+	c.bufPos = nil
 	c.buf = c.buf[:0]
 	c.obuf = c.obuf[:0]
 	c.notSpaceCharPos = 0
@@ -83,9 +85,12 @@ func (c *Context) addToken(tk *token.Token) {
 	c.tokens = append(c.tokens, tk)
 }
 
-func (c *Context) addBuf(r rune) {
-	if len(c.buf) == 0 && r == ' ' {
-		return
+func (c *Context) addBuf(r rune, pos *token.Position) {
+	if len(c.buf) == 0 {
+		if r == ' ' {
+			return
+		}
+		c.bufPos = pos
 	}
 	c.buf = append(c.buf, r)
 	if r != ' ' && r != '\t' {
@@ -188,7 +193,7 @@ func (c *Context) bufferedSrc() []rune {
 	return src
 }
 
-func (c *Context) bufferedToken(pos *token.Position) *token.Token {
+func (c *Context) bufferedToken() *token.Token {
 	if c.idx == 0 {
 		return nil
 	}
@@ -198,10 +203,14 @@ func (c *Context) bufferedToken(pos *token.Position) *token.Token {
 	}
 	var tk *token.Token
 	if c.isDocument() {
-		tk = token.String(string(source), string(c.obuf), pos)
+		tk = token.String(string(source), string(c.obuf), c.bufPos)
 	} else {
-		tk = token.New(string(source), string(c.obuf), pos)
+		tk = token.New(string(source), string(c.obuf), c.bufPos)
 	}
 	c.resetBuffer()
 	return tk
+}
+
+func (c *Context) addBufferedTokenIfExists() {
+	c.addToken(c.bufferedToken())
 }
