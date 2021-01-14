@@ -71,7 +71,7 @@ func (c *Context) isSaveIndentMode() bool {
 	return c.isLiteral || c.isFolded || c.isRawFolded
 }
 
-func (c *Context) breakLiteral() {
+func (c *Context) breakScalar() {
 	c.isLiteral = false
 	c.isRawFolded = false
 	c.isFolded = false
